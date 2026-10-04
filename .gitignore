@@ -1,0 +1,22 @@
+# Secrets & Environment
+.env
+*.env
+
+# Binaries
+bin/
+harvester
+harvester-*
+
+# Database & Data Lake
+data/
+*.db
+*.db-wal
+*.db-shm
+*.parquet
+
+# OS & Editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
