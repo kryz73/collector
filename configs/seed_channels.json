@@ -1,0 +1,38 @@
+{
+  "description": "Stratified Seed Creator Registry for YouTube Trending Crawler",
+  "tiers": {
+    "tier_1_high_potential": {
+      "target_subscriber_range": "1M - 10M",
+      "expected_trending_rate": 0.40,
+      "channels": [
+        {"channel_id": "UCX6OQ3DkcsbYNE6H8uQQuVA", "name": "MrBeast Gaming", "category_id": 20},
+        {"channel_id": "UC-lHJZR3Gqxm24_Vd_AJ5Yw", "name": "PewDiePie", "category_id": 24},
+        {"channel_id": "UCBJycsmduvYEL83R_U4JriQ", "name": "MKBHD", "category_id": 28},
+        {"channel_id": "UCtinbF-Q-fVthA0qrFQTgXQ", "name": "CaseyNeistat", "category_id": 24},
+        {"channel_id": "UCupvZG-5ko_eiXAupbDfxWw", "name": "CNN", "category_id": 25},
+        {"channel_id": "UC295-Dw_tDNtZXFeAPAW6Aw", "name": "5-Minute Crafts", "category_id": 26},
+        {"channel_id": "UC0C-w0YjGpqDXGB8IHb662A", "name": "Ed Sheeran", "category_id": 10},
+        {"channel_id": "UCvK4bOhULCpmLabd2pDMlA", "name": "Linus Tech Tips", "category_id": 28}
+      ]
+    },
+    "tier_2_battleground": {
+      "target_subscriber_range": "100K - 1M",
+      "expected_trending_rate": 0.15,
+      "channels": [
+        {"channel_id": "UCsTcErHg8oDvUnTzoqsYeNw", "name": "Unbox Therapy", "category_id": 28},
+        {"channel_id": "UCBcRF18a7Qf58cCRy5kaWwQ", "name": "Dave2D", "category_id": 28},
+        {"channel_id": "UCm9K6rby98W8JigLoZOh6FQ", "name": "LockPickingLawyer", "category_id": 26},
+        {"channel_id": "UC7_gcs09iThXybpVgjHZ_7g", "name": "PBS Space Time", "category_id": 28},
+        {"channel_id": "UCsooa4yRKGN_zEE8iknghZA", "name": "TED-Ed", "category_id": 27}
+      ]
+    },
+    "tier_3_breakout": {
+      "target_subscriber_range": "25K - 100K",
+      "expected_trending_rate": 0.05,
+      "channels": [
+        {"channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw", "name": "TechLinked", "category_id": 28},
+        {"channel_id": "UCYO_jab_esuFRV4b17AJtAw", "name": "3Blue1Brown", "category_id": 28}
+      ]
+    }
+  }
+}

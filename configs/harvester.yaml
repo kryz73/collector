@@ -1,0 +1,54 @@
+# ==============================================================================
+# YouTube Data Harvester Configuration (collector/)
+# Standalone Go Data Ingestion Service optimized for 10,000 Quota/Day
+# ==============================================================================
+
+youtube:
+  api_key: ""                          # Set via YOUTUBE_API_KEY environment variable
+  daily_quota_limit: 10000
+
+database:
+  path: "./data/harvester.db"
+
+regions:
+  - "US"
+  - "CA"
+
+discovery:
+  rss_poll_interval: "90m"             # Frequency to check channel RSS feeds (0 quota cost)
+  max_video_age_minutes: 90            # Only track videos published within the last 90 minutes
+  concurrency_limit: 20                # Concurrent HTTP workers for RSS parsing
+
+snapshots:
+  poll_interval: "5m"                  # Scheduler tick to check due observation snapshots
+  tolerance_minutes: 15                # Allowed ± window around target checkpoint
+  checkpoints_hours:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 12
+    - 24
+    - 36
+    - 48
+    - 60
+
+comments:
+  harvest_at_checkpoint: 6.0           # Trigger comment harvesting at 6-hour observation cutoff
+  max_pages_per_video: 3               # Max pages (100 comments/page) per video
+  max_results_per_page: 100            # YouTube API max per page
+
+trending:
+  poll_interval: "2h"                  # Check US & CA trending charts every 2 hours
+  auto_expand_channels: true           # Automatically add untracked trending creators to registry
+
+channels:
+  seed_file: "configs/seed_channels.json"
+  max_channels: 1500                   # LRU channel cap to prevent unbounded polling bloat
+  eviction_inactive_days: 45           # Evict channels with no uploads in 45 days when cap reached
+
+export:
+  parquet_interval: "6h"               # Export sealed records to Apache Parquet every 6 hours
+  output_dir: "./data/export"          # Parquet destination directory for ML consumption
