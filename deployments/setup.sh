@@ -24,6 +24,20 @@ fi
 
 echo "Go version: $(go version)"
 
+# 2.5 Configure swap space if not present (prevents compiler OOM on 1GB instances)
+if [ "$(free -m | awk '/^Swap:/ {print $2}')" -eq "0" ]; then
+    echo "Creating 2GB swapfile to prevent compiler OOM on small instances..."
+    sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    if ! grep -q "/swapfile" /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    fi
+    echo "Swap enabled:"
+    free -h
+fi
+
 # 3. Build Harvester Binary
 echo "Building harvester binary..."
 make build
@@ -46,7 +60,7 @@ sudo systemctl daemon-reload
 echo "=================================================================="
 echo " Setup Complete!"
 echo " Next steps:"
-echo " 1. Edit .env with your real YOUTUBE_API_KEY"
+echo " 1. Edit .env with your real YOUTUBE_API_KEY: nano .env"
 echo " 2. Enable & start service: sudo systemctl enable --now viral-harvester"
 echo " 3. Check logs: journalctl -u viral-harvester -f"
 echo "=================================================================="

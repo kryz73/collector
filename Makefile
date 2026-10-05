@@ -6,7 +6,7 @@ all: test build
 
 build:
 	@mkdir -p bin
-	go build -ldflags="-s -w" -o $(BINARY_NAME) ./cmd/harvester
+	go build -p 1 -ldflags="-s -w" -o $(BINARY_NAME) ./cmd/harvester
 
 build-linux-arm64:
 	@mkdir -p bin
