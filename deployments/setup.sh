@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "=================================================================="
-echo " YouTube Data Harvester (collector/) EC2 Bootstrap Script"
+echo " YouTube Data Harvester (harvest/) EC2 Bootstrap Script"
 echo "=================================================================="
 
 # 1. Update and install base packages

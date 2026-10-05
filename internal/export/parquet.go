@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/kryz73/collector/internal/database"
+	"github.com/kryz73/harvest/internal/database"
 	"github.com/parquet-go/parquet-go"
 )
 

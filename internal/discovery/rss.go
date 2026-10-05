@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kryz73/collector/internal/database"
+	"github.com/kryz73/harvest/internal/database"
 )
 
 // Atom XML structures matching YouTube's public feeds/videos.xml format

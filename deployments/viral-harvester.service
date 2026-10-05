@@ -7,14 +7,14 @@ Wants=network-online.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/collector
-ExecStart=/home/ubuntu/collector/bin/harvester -config /home/ubuntu/collector/configs/harvester.yaml
+WorkingDirectory=/home/ubuntu/harvest
+ExecStart=/home/ubuntu/harvest/bin/harvester -config /home/ubuntu/harvest/configs/harvester.yaml
 Restart=always
 RestartSec=10
 LimitNOFILE=65536
 
 # Environment variables
-EnvironmentFile=/home/ubuntu/collector/.env
+EnvironmentFile=/home/ubuntu/harvest/.env
 
 # Standard output and error logging to journald
 StandardOutput=journal

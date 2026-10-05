@@ -1,4 +1,4 @@
-module github.com/kryz73/collector
+module github.com/kryz73/harvest
 
 go 1.27.0
 

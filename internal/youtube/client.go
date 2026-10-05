@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kryz73/collector/internal/database"
-	"github.com/kryz73/collector/internal/quota"
+	"github.com/kryz73/harvest/internal/database"
+	"github.com/kryz73/harvest/internal/quota"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	yapi "google.golang.org/api/youtube/v3"

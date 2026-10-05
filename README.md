@@ -1,4 +1,4 @@
-# YouTube Data Harvester (`collector`)
+# YouTube Data Harvester (`harvest`)
 
 A high-performance, standalone Go data ingestion daemon designed to run 24/7 on AWS EC2, continuously harvesting temporally precise video engagement metrics, early audience comments, and regional trending outcomes while staying strictly within a **single YouTube API key limit of 10,000 quota units/day**.
 
@@ -52,7 +52,7 @@ A high-performance, standalone Go data ingestion daemon designed to run 24/7 on 
 ## 🗂 Project Structure
 
 ```text
-collector/
+harvest/
 ├── cmd/
 │   └── harvester/
 │       └── main.go                 # Daemon entrypoint, signal handling, graceful shutdown
@@ -128,8 +128,8 @@ export YOUTUBE_API_KEY="your-google-api-key"
 ### 2. Bootstrap the Server
 SSH into your instance and run:
 ```bash
-git clone git@github.com:kryz73/collector.git
-cd collector
+git clone git@github.com:kryz73/harvest.git
+cd harvest
 ./deployments/setup.sh
 ```
 
@@ -164,7 +164,7 @@ Every 6 hours, completed video records are exported to `data/export/partition_da
 Load directly into Polars or DuckDB in your Python ML pipeline:
 ```python
 import polars as pl
-df_obs = pl.read_parquet("collector/data/export/**/*.parquet")
+df_obs = pl.read_parquet("harvest/data/export/**/*.parquet")
 ```
 
 ---

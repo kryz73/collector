@@ -6,13 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kryz73/collector/internal/config"
-	"github.com/kryz73/collector/internal/database"
-	"github.com/kryz73/collector/internal/discovery"
-	"github.com/kryz73/collector/internal/export"
-	"github.com/kryz73/collector/internal/quota"
-	"github.com/kryz73/collector/internal/registry"
-	"github.com/kryz73/collector/internal/youtube"
+	"github.com/kryz73/harvest/internal/config"
+	"github.com/kryz73/harvest/internal/database"
+	"github.com/kryz73/harvest/internal/discovery"
+	"github.com/kryz73/harvest/internal/export"
+	"github.com/kryz73/harvest/internal/quota"
+	"github.com/kryz73/harvest/internal/registry"
+	"github.com/kryz73/harvest/internal/youtube"
 )
 
 type Scheduler struct {

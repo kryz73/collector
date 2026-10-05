@@ -1,5 +1,5 @@
 # ==============================================================================
-# YouTube Data Harvester Configuration (collector/)
+# YouTube Data Harvester Configuration (harvest/)
 # Standalone Go Data Ingestion Service optimized for 10,000 Quota/Day
 # ==============================================================================
 

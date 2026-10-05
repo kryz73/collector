@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kryz73/collector/internal/database"
+	"github.com/kryz73/harvest/internal/database"
 )
 
 func TestParquetExport(t *testing.T) {
