@@ -4,8 +4,8 @@
 
 # Binaries
 bin/
-harvester
-harvester-*
+/harvester
+/harvester-*
 
 # Database & Data Lake
 data/
