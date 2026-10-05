@@ -329,16 +329,32 @@ func (s *Scheduler) runTrendingOnce(ctx context.Context) {
 		for _, v := range videos {
 			exists, _ := s.db.VideoExists(v.VideoID)
 			if !exists {
-				v.TrackedFromBirth = false
-				_ = s.db.InsertVideo(v)
-
-				// Harvest early comments for this viral video
-				s.harvestCommentsForVideo(ctx, v.VideoID, v.PublishedAt)
-
-				// Auto-expand channel registry
+				// 1. Ensure channel is in channels table first (satisfies FOREIGN KEY)
 				if s.cfg.Trending.AutoExpandChannels {
-					_ = s.regManager.AddDiscoveredChannel(v.ChannelID, "", v.CategoryID)
+					if err := s.regManager.AddDiscoveredChannel(v.ChannelID, v.ChannelTitle, v.CategoryID); err != nil {
+						s.logger.Warn("Failed auto-expanding trending channel", "channel_id", v.ChannelID, "error", err)
+					}
+				} else {
+					// Insert stub channel if auto-expand is disabled to satisfy FK
+					_ = s.db.InsertChannel(database.Channel{
+						ChannelID:    v.ChannelID,
+						ChannelTitle: v.ChannelTitle,
+						CategoryID:   v.CategoryID,
+						Tier:         "trending_stub",
+						AddedAt:      time.Now().UTC(),
+						IsActive:     false,
+					})
 				}
+
+				// 2. Insert video
+				v.TrackedFromBirth = false
+				if err := s.db.InsertVideo(v); err != nil {
+					s.logger.Error("Failed inserting trending video", "video_id", v.VideoID, "error", err)
+					continue
+				}
+
+				// 3. Harvest early comments for this viral video
+				s.harvestCommentsForVideo(ctx, v.VideoID, v.PublishedAt)
 			}
 		}
 

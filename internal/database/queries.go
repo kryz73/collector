@@ -82,21 +82,33 @@ func (db *DB) EvictOldestChannels(limit int, daysInactive int) error {
 func (db *DB) InsertVideo(v Video) error {
 	query := `
 	INSERT INTO videos (
-		video_id, channel_id, title, description, category_id, tags, 
-		duration_seconds, default_audio_lang, published_at, discovered_at, tracked_from_birth
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		video_id, channel_id, channel_title, title, description, category_id, tags, 
+		duration_seconds, definition, caption, licensed_content, made_for_kids,
+		live_broadcast_content, default_audio_lang, thumbnail_url, topic_categories,
+		published_at, discovered_at, tracked_from_birth
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(video_id) DO UPDATE SET
+		channel_title = excluded.channel_title,
 		title = excluded.title,
 		description = excluded.description,
 		category_id = excluded.category_id,
 		tags = excluded.tags,
 		duration_seconds = excluded.duration_seconds,
-		default_audio_lang = excluded.default_audio_lang;
+		definition = excluded.definition,
+		caption = excluded.caption,
+		licensed_content = excluded.licensed_content,
+		made_for_kids = excluded.made_for_kids,
+		live_broadcast_content = excluded.live_broadcast_content,
+		default_audio_lang = excluded.default_audio_lang,
+		thumbnail_url = excluded.thumbnail_url,
+		topic_categories = excluded.topic_categories;
 	`
 	_, err := db.Exec(
 		query,
-		v.VideoID, v.ChannelID, v.Title, v.Description, v.CategoryID, v.Tags,
-		v.DurationSeconds, v.DefaultAudioLang, v.PublishedAt, v.DiscoveredAt, v.TrackedFromBirth,
+		v.VideoID, v.ChannelID, v.ChannelTitle, v.Title, v.Description, v.CategoryID, v.Tags,
+		v.DurationSeconds, v.Definition, v.Caption, v.LicensedContent, v.MadeForKids,
+		v.LiveBroadcastContent, v.DefaultAudioLang, v.ThumbnailURL, v.TopicCategories,
+		v.PublishedAt, v.DiscoveredAt, v.TrackedFromBirth,
 	)
 	return err
 }
@@ -257,9 +269,12 @@ func (db *DB) InsertComments(comments []Comment) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO comments (
-			comment_id, video_id, author_channel, text, published_at, elapsed_minutes, like_count, reply_count
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			comment_id, video_id, author_channel, author_display_name, text, 
+			published_at, updated_at, elapsed_minutes, like_count, reply_count
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(comment_id) DO UPDATE SET
+			text = excluded.text,
+			updated_at = excluded.updated_at,
 			like_count = excluded.like_count,
 			reply_count = excluded.reply_count;
 	`)
@@ -270,7 +285,8 @@ func (db *DB) InsertComments(comments []Comment) error {
 
 	for _, c := range comments {
 		if _, err := stmt.Exec(
-			c.CommentID, c.VideoID, c.AuthorChannel, c.Text, c.PublishedAt, c.ElapsedMinutes, c.LikeCount, c.ReplyCount,
+			c.CommentID, c.VideoID, c.AuthorChannel, c.AuthorDisplayName, c.Text,
+			c.PublishedAt, c.UpdatedAt, c.ElapsedMinutes, c.LikeCount, c.ReplyCount,
 		); err != nil {
 			return err
 		}
@@ -336,8 +352,10 @@ func (db *DB) GetVideosByIDs(videoIDs []string) ([]Video, error) {
 		args[i] = id
 	}
 	query := fmt.Sprintf(`
-		SELECT video_id, channel_id, title, description, category_id, tags, 
-		       duration_seconds, default_audio_lang, published_at, discovered_at, tracked_from_birth
+		SELECT video_id, channel_id, channel_title, title, description, category_id, tags, 
+		       duration_seconds, definition, caption, licensed_content, made_for_kids,
+		       live_broadcast_content, default_audio_lang, thumbnail_url, topic_categories,
+		       published_at, discovered_at, tracked_from_birth
 		FROM videos WHERE video_id IN (%s);
 	`, strings.Join(placeholders, ","))
 
@@ -350,16 +368,22 @@ func (db *DB) GetVideosByIDs(videoIDs []string) ([]Video, error) {
 	var videos []Video
 	for rows.Next() {
 		var v Video
-		var desc, tags, lang sql.NullString
+		var desc, tags, def, live, lang, thumb, topics sql.NullString
 		if err := rows.Scan(
-			&v.VideoID, &v.ChannelID, &v.Title, &desc, &v.CategoryID, &tags,
-			&v.DurationSeconds, &lang, &v.PublishedAt, &v.DiscoveredAt, &v.TrackedFromBirth,
+			&v.VideoID, &v.ChannelID, &v.ChannelTitle, &v.Title, &desc, &v.CategoryID, &tags,
+			&v.DurationSeconds, &def, &v.Caption, &v.LicensedContent, &v.MadeForKids,
+			&live, &lang, &thumb, &topics,
+			&v.PublishedAt, &v.DiscoveredAt, &v.TrackedFromBirth,
 		); err != nil {
 			return nil, err
 		}
 		v.Description = desc.String
 		v.Tags = tags.String
+		v.Definition = def.String
+		v.LiveBroadcastContent = live.String
 		v.DefaultAudioLang = lang.String
+		v.ThumbnailURL = thumb.String
+		v.TopicCategories = topics.String
 		videos = append(videos, v)
 	}
 	return videos, rows.Err()
@@ -413,7 +437,8 @@ func (db *DB) GetCommentsByVideoIDs(videoIDs []string) ([]Comment, error) {
 		args[i] = id
 	}
 	query := fmt.Sprintf(`
-		SELECT comment_id, video_id, author_channel, text, published_at, elapsed_minutes, like_count, reply_count
+		SELECT comment_id, video_id, author_channel, author_display_name, text, 
+		       published_at, updated_at, elapsed_minutes, like_count, reply_count
 		FROM comments WHERE video_id IN (%s);
 	`, strings.Join(placeholders, ","))
 
@@ -426,13 +451,19 @@ func (db *DB) GetCommentsByVideoIDs(videoIDs []string) ([]Comment, error) {
 	var comments []Comment
 	for rows.Next() {
 		var c Comment
-		var author sql.NullString
+		var author, authorName sql.NullString
+		var updatedAt sql.NullTime
 		if err := rows.Scan(
-			&c.CommentID, &c.VideoID, &author, &c.Text, &c.PublishedAt, &c.ElapsedMinutes, &c.LikeCount, &c.ReplyCount,
+			&c.CommentID, &c.VideoID, &author, &authorName, &c.Text,
+			&c.PublishedAt, &updatedAt, &c.ElapsedMinutes, &c.LikeCount, &c.ReplyCount,
 		); err != nil {
 			return nil, err
 		}
 		c.AuthorChannel = author.String
+		c.AuthorDisplayName = authorName.String
+		if updatedAt.Valid {
+			c.UpdatedAt = updatedAt.Time
+		}
 		comments = append(comments, c)
 	}
 	return comments, rows.Err()

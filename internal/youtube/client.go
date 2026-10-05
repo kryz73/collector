@@ -17,6 +17,15 @@ import (
 	yapi "google.golang.org/api/youtube/v3"
 )
 
+// videoParts specifies all useful parts retrieved in a single batched videos.list call for 1 quota unit.
+var videoParts = []string{
+	"snippet",
+	"statistics",
+	"contentDetails",
+	"status",
+	"topicDetails",
+}
+
 type Client struct {
 	service  *yapi.Service
 	governor *quota.Governor
@@ -40,7 +49,7 @@ func NewClient(ctx context.Context, apiKey string, gov *quota.Governor, logger *
 	}, nil
 }
 
-// FetchVideoDetails fetches snippet, statistics, and contentDetails for up to 50 video IDs per call.
+// FetchVideoDetails fetches complete metadata and statistics for up to 50 video IDs per call.
 func (c *Client) FetchVideoDetails(ctx context.Context, videoIDs []string) ([]database.Video, []database.Observation, error) {
 	if len(videoIDs) == 0 {
 		return nil, nil, nil
@@ -65,7 +74,7 @@ func (c *Client) FetchVideoDetails(ctx context.Context, videoIDs []string) ([]da
 
 		var response *yapi.VideoListResponse
 		err := c.retryWithBackoff(ctx, func() error {
-			call := c.service.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
+			call := c.service.Videos.List(videoParts).
 				Id(joinedIDs).
 				Context(ctx)
 			var apiErr error
@@ -79,41 +88,8 @@ func (c *Client) FetchVideoDetails(ctx context.Context, videoIDs []string) ([]da
 		}
 
 		for _, item := range response.Items {
-			pubTime, parseErr := time.Parse(time.RFC3339, item.Snippet.PublishedAt)
-			if parseErr != nil {
-				pubTime = now
-			}
-
-			catID, _ := strconv.Atoi(item.Snippet.CategoryId)
-			tagsJSON, _ := json.Marshal(item.Snippet.Tags)
-			durationSecs := ParseISODuration(item.ContentDetails.Duration)
-
-			v := database.Video{
-				VideoID:          item.Id,
-				ChannelID:        item.Snippet.ChannelId,
-				Title:            item.Snippet.Title,
-				Description:      item.Snippet.Description,
-				CategoryID:       catID,
-				Tags:             string(tagsJSON),
-				DurationSeconds:  durationSecs,
-				DefaultAudioLang: item.Snippet.DefaultAudioLanguage,
-				PublishedAt:      pubTime,
-				DiscoveredAt:     now,
-				TrackedFromBirth: true,
-			}
-			allVideos = append(allVideos, v)
-
-			elapsedHours := now.Sub(pubTime).Hours()
-			obs := database.Observation{
-				VideoID:                item.Id,
-				CheckpointTargetHours:  elapsedHours,
-				ActualElapsedHours:     elapsedHours,
-				ObservedAt:             now,
-				ViewCount:              int64(item.Statistics.ViewCount),
-				LikeCount:              int64(item.Statistics.LikeCount),
-				CommentCount:           int64(item.Statistics.CommentCount),
-				IsTrending:             false,
-			}
+			video, obs := parseVideoItem(item, now, true)
+			allVideos = append(allVideos, video)
 			allObs = append(allObs, obs)
 		}
 	}
@@ -129,7 +105,7 @@ func (c *Client) FetchTrending(ctx context.Context, regionCode string) ([]databa
 
 	var response *yapi.VideoListResponse
 	err := c.retryWithBackoff(ctx, func() error {
-		call := c.service.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
+		call := c.service.Videos.List(videoParts).
 			Chart("mostPopular").
 			RegionCode(regionCode).
 			MaxResults(50).
@@ -148,35 +124,15 @@ func (c *Client) FetchTrending(ctx context.Context, regionCode string) ([]databa
 	var videos []database.Video
 
 	for rank, item := range response.Items {
-		pubTime, parseErr := time.Parse(time.RFC3339, item.Snippet.PublishedAt)
-		if parseErr != nil {
-			pubTime = now
-		}
-
-		catID, _ := strconv.Atoi(item.Snippet.CategoryId)
-		tagsJSON, _ := json.Marshal(item.Snippet.Tags)
-		durationSecs := ParseISODuration(item.ContentDetails.Duration)
+		video, _ := parseVideoItem(item, now, false)
+		videos = append(videos, video)
 
 		events = append(events, database.TrendingEvent{
 			VideoID:       item.Id,
 			RegionCode:    regionCode,
 			TrendingRank:  rank + 1,
 			CapturedAt:    now,
-			IsTrackedSeed: false, // Updated by caller if video was tracked
-		})
-
-		videos = append(videos, database.Video{
-			VideoID:          item.Id,
-			ChannelID:        item.Snippet.ChannelId,
-			Title:            item.Snippet.Title,
-			Description:      item.Snippet.Description,
-			CategoryID:       catID,
-			Tags:             string(tagsJSON),
-			DurationSeconds:  durationSecs,
-			DefaultAudioLang: item.Snippet.DefaultAudioLanguage,
-			PublishedAt:      pubTime,
-			DiscoveredAt:     now,
-			TrackedFromBirth: false,
+			IsTrackedSeed: false, // Caller updates this if already tracked
 		})
 	}
 
@@ -232,6 +188,13 @@ func (c *Client) FetchComments(ctx context.Context, videoID string, videoPublish
 				cPubTime = time.Now().UTC()
 			}
 
+			var cUpdTime time.Time
+			if top.UpdatedAt != "" {
+				cUpdTime, _ = time.Parse(time.RFC3339, top.UpdatedAt)
+			} else {
+				cUpdTime = cPubTime
+			}
+
 			elapsedMins := cPubTime.Sub(videoPublishedAt).Minutes()
 
 			// Anti-leakage: comments strictly within 6-hour window (360 minutes)
@@ -244,15 +207,23 @@ func (c *Client) FetchComments(ctx context.Context, videoID string, videoPublish
 				authorChannel = top.AuthorChannelId.Value
 			}
 
+			// Prefer TextOriginal (raw unescaped text) for clean NLP sentiment & tokenization
+			commentText := top.TextOriginal
+			if commentText == "" {
+				commentText = top.TextDisplay
+			}
+
 			comments = append(comments, database.Comment{
-				CommentID:      item.Id,
-				VideoID:        videoID,
-				AuthorChannel:  authorChannel,
-				Text:           top.TextDisplay,
-				PublishedAt:    cPubTime,
-				ElapsedMinutes: elapsedMins,
-				LikeCount:      top.LikeCount,
-				ReplyCount:     item.Snippet.TotalReplyCount,
+				CommentID:         item.Id,
+				VideoID:           videoID,
+				AuthorChannel:     authorChannel,
+				AuthorDisplayName: top.AuthorDisplayName,
+				Text:              commentText,
+				PublishedAt:       cPubTime,
+				UpdatedAt:         cUpdTime,
+				ElapsedMinutes:    elapsedMins,
+				LikeCount:         top.LikeCount,
+				ReplyCount:        item.Snippet.TotalReplyCount,
 			})
 		}
 
@@ -263,6 +234,99 @@ func (c *Client) FetchComments(ctx context.Context, videoID string, videoPublish
 	}
 
 	return comments, nil
+}
+
+// parseVideoItem extracts all comprehensive fields from a YouTube API video item.
+func parseVideoItem(item *yapi.Video, now time.Time, trackedFromBirth bool) (database.Video, database.Observation) {
+	pubTime, parseErr := time.Parse(time.RFC3339, item.Snippet.PublishedAt)
+	if parseErr != nil {
+		pubTime = now
+	}
+
+	catID, _ := strconv.Atoi(item.Snippet.CategoryId)
+	tagsJSON, _ := json.Marshal(item.Snippet.Tags)
+	durationSecs := ParseISODuration(item.ContentDetails.Duration)
+
+	// Thumbnail resolution selection: maxres > standard > high > medium > default
+	thumbURL := ""
+	if item.Snippet.Thumbnails != nil {
+		if item.Snippet.Thumbnails.Maxres != nil {
+			thumbURL = item.Snippet.Thumbnails.Maxres.Url
+		} else if item.Snippet.Thumbnails.Standard != nil {
+			thumbURL = item.Snippet.Thumbnails.Standard.Url
+		} else if item.Snippet.Thumbnails.High != nil {
+			thumbURL = item.Snippet.Thumbnails.High.Url
+		} else if item.Snippet.Thumbnails.Medium != nil {
+			thumbURL = item.Snippet.Thumbnails.Medium.Url
+		} else if item.Snippet.Thumbnails.Default != nil {
+			thumbURL = item.Snippet.Thumbnails.Default.Url
+		}
+	}
+
+	// Topic categories (Wikipedia topic URLs)
+	var topicCategoriesJSON string
+	if item.TopicDetails != nil && len(item.TopicDetails.TopicCategories) > 0 {
+		topicsBytes, _ := json.Marshal(item.TopicDetails.TopicCategories)
+		topicCategoriesJSON = string(topicsBytes)
+	}
+
+	// Status & Content flags
+	madeForKids := false
+	if item.Status != nil {
+		madeForKids = item.Status.MadeForKids
+	}
+
+	caption := false
+	definition := "hd"
+	licensedContent := false
+	if item.ContentDetails != nil {
+		caption = item.ContentDetails.Caption == "true"
+		definition = item.ContentDetails.Definition
+		licensedContent = item.ContentDetails.LicensedContent
+	}
+
+	video := database.Video{
+		VideoID:              item.Id,
+		ChannelID:            item.Snippet.ChannelId,
+		ChannelTitle:         item.Snippet.ChannelTitle,
+		Title:                item.Snippet.Title,
+		Description:          item.Snippet.Description,
+		CategoryID:           catID,
+		Tags:                 string(tagsJSON),
+		DurationSeconds:      durationSecs,
+		Definition:           definition,
+		Caption:              caption,
+		LicensedContent:      licensedContent,
+		MadeForKids:          madeForKids,
+		LiveBroadcastContent: item.Snippet.LiveBroadcastContent,
+		DefaultAudioLang:     item.Snippet.DefaultAudioLanguage,
+		ThumbnailURL:         thumbURL,
+		TopicCategories:      topicCategoriesJSON,
+		PublishedAt:          pubTime,
+		DiscoveredAt:         now,
+		TrackedFromBirth:     trackedFromBirth,
+	}
+
+	var views, likes, comments int64
+	if item.Statistics != nil {
+		views = int64(item.Statistics.ViewCount)
+		likes = int64(item.Statistics.LikeCount)
+		comments = int64(item.Statistics.CommentCount)
+	}
+
+	elapsedHours := now.Sub(pubTime).Hours()
+	obs := database.Observation{
+		VideoID:               item.Id,
+		CheckpointTargetHours: elapsedHours,
+		ActualElapsedHours:    elapsedHours,
+		ObservedAt:            now,
+		ViewCount:             views,
+		LikeCount:             likes,
+		CommentCount:          comments,
+		IsTrending:            false,
+	}
+
+	return video, obs
 }
 
 // retryWithBackoff retries transient 5xx or network errors with exponential backoff and jitter.

@@ -15,17 +15,25 @@ CREATE TABLE IF NOT EXISTS channels (
 CREATE INDEX IF NOT EXISTS idx_channels_active ON channels(is_active);
 
 CREATE TABLE IF NOT EXISTS videos (
-    video_id            TEXT PRIMARY KEY,
-    channel_id          TEXT NOT NULL,
-    title               TEXT NOT NULL,
-    description         TEXT,
-    category_id         INTEGER NOT NULL DEFAULT 0,
-    tags                TEXT,
-    duration_seconds    INTEGER DEFAULT 0,
-    default_audio_lang  TEXT,
-    published_at        DATETIME NOT NULL,
-    discovered_at       DATETIME NOT NULL DEFAULT (datetime('now')),
-    tracked_from_birth  BOOLEAN NOT NULL DEFAULT 1,
+    video_id                TEXT PRIMARY KEY,
+    channel_id              TEXT NOT NULL,
+    channel_title           TEXT NOT NULL DEFAULT '',
+    title                   TEXT NOT NULL,
+    description             TEXT,
+    category_id             INTEGER NOT NULL DEFAULT 0,
+    tags                    TEXT,
+    duration_seconds        INTEGER DEFAULT 0,
+    definition              TEXT DEFAULT 'hd',
+    caption                 BOOLEAN DEFAULT 0,
+    licensed_content        BOOLEAN DEFAULT 0,
+    made_for_kids           BOOLEAN DEFAULT 0,
+    live_broadcast_content  TEXT DEFAULT 'none',
+    default_audio_lang      TEXT,
+    thumbnail_url           TEXT,
+    topic_categories        TEXT,
+    published_at            DATETIME NOT NULL,
+    discovered_at           DATETIME NOT NULL DEFAULT (datetime('now')),
+    tracked_from_birth      BOOLEAN NOT NULL DEFAULT 1,
     FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
 );
 CREATE INDEX IF NOT EXISTS idx_videos_channel ON videos(channel_id);
@@ -60,14 +68,16 @@ CREATE TABLE IF NOT EXISTS observations (
 CREATE INDEX IF NOT EXISTS idx_obs_video ON observations(video_id);
 
 CREATE TABLE IF NOT EXISTS comments (
-    comment_id      TEXT PRIMARY KEY,
-    video_id        TEXT NOT NULL,
-    author_channel  TEXT,
-    text            TEXT NOT NULL,
-    published_at    DATETIME NOT NULL,
-    elapsed_minutes REAL NOT NULL,
-    like_count      INTEGER NOT NULL DEFAULT 0,
-    reply_count     INTEGER NOT NULL DEFAULT 0,
+    comment_id          TEXT PRIMARY KEY,
+    video_id            TEXT NOT NULL,
+    author_channel      TEXT,
+    author_display_name TEXT,
+    text                TEXT NOT NULL,
+    published_at        DATETIME NOT NULL,
+    updated_at          DATETIME,
+    elapsed_minutes     REAL NOT NULL,
+    like_count          INTEGER NOT NULL DEFAULT 0,
+    reply_count         INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (video_id) REFERENCES videos(video_id)
 );
 CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);

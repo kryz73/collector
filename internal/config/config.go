@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -30,9 +32,9 @@ type DatabaseConfig struct {
 }
 
 type DiscoveryConfig struct {
-	RSSPollInterval     time.Duration `yaml:"rss_poll_interval"`
-	MaxVideoAgeMinutes  int           `yaml:"max_video_age_minutes"`
-	ConcurrencyLimit    int           `yaml:"concurrency_limit"`
+	RSSPollInterval    time.Duration `yaml:"rss_poll_interval"`
+	MaxVideoAgeMinutes int           `yaml:"max_video_age_minutes"`
+	ConcurrencyLimit   int           `yaml:"concurrency_limit"`
 }
 
 type SnapshotConfig struct {
@@ -48,8 +50,8 @@ type CommentConfig struct {
 }
 
 type TrendingConfig struct {
-	PollInterval        time.Duration `yaml:"poll_interval"`
-	AutoExpandChannels  bool          `yaml:"auto_expand_channels"`
+	PollInterval       time.Duration `yaml:"poll_interval"`
+	AutoExpandChannels bool          `yaml:"auto_expand_channels"`
 }
 
 type ChannelConfig struct {
@@ -103,7 +105,36 @@ func DefaultConfig() *Config {
 	}
 }
 
+// loadDotEnv loads key-value pairs from .env into the process environment if present.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			if os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
+		}
+	}
+}
+
 func LoadConfig(path string) (*Config, error) {
+	// Auto-load .env from working directory or project root
+	loadDotEnv(".env")
+
 	cfg := DefaultConfig()
 
 	if path != "" {

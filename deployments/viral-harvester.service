@@ -1,0 +1,25 @@
+[Unit]
+Description=YouTube Data Harvester Daemon (viral-harvester)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/collector
+ExecStart=/home/ubuntu/collector/bin/harvester -config /home/ubuntu/collector/configs/harvester.yaml
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+# Environment variables
+EnvironmentFile=/home/ubuntu/collector/.env
+
+# Standard output and error logging to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=viral-harvester
+
+[Install]
+WantedBy=multi-user.target
