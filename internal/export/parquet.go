@@ -112,6 +112,81 @@ func (e *Exporter) ExportSealedVideos(batchSize int) (int, error) {
 	return len(videoIDs), nil
 }
 
+// ExportAllCurrentData immediately dumps all videos, observations, comments, and trending events
+// from the database to Snappy Parquet files without waiting for 60-hour lifecycle completion.
+func (e *Exporter) ExportAllCurrentData() error {
+	if err := os.MkdirAll(e.outputDir, 0755); err != nil {
+		return fmt.Errorf("creating export directory: %w", err)
+	}
+
+	now := time.Now().UTC()
+	datePartition := now.Format("2006-01-02")
+	partDir := filepath.Join(e.outputDir, fmt.Sprintf("partition_date=%s", datePartition))
+	if err := os.MkdirAll(partDir, 0755); err != nil {
+		return fmt.Errorf("creating date partition dir %s: %w", partDir, err)
+	}
+
+	timestampSuffix := now.Format("20060102_150405")
+
+	// 1. Export Videos
+	videos, err := e.db.GetAllVideos()
+	if err != nil {
+		return fmt.Errorf("getting all videos: %w", err)
+	}
+	if len(videos) > 0 {
+		videoFile := filepath.Join(partDir, fmt.Sprintf("videos_all_%s.parquet", timestampSuffix))
+		if err := writeParquet(videoFile, videos); err != nil {
+			return fmt.Errorf("writing videos parquet: %w", err)
+		}
+	}
+
+	// 2. Export Observations
+	obs, err := e.db.GetAllObservations()
+	if err != nil {
+		return fmt.Errorf("getting all observations: %w", err)
+	}
+	if len(obs) > 0 {
+		obsFile := filepath.Join(partDir, fmt.Sprintf("observations_all_%s.parquet", timestampSuffix))
+		if err := writeParquet(obsFile, obs); err != nil {
+			return fmt.Errorf("writing observations parquet: %w", err)
+		}
+	}
+
+	// 3. Export Comments
+	comments, err := e.db.GetAllComments()
+	if err != nil {
+		return fmt.Errorf("getting all comments: %w", err)
+	}
+	if len(comments) > 0 {
+		commentFile := filepath.Join(partDir, fmt.Sprintf("comments_all_%s.parquet", timestampSuffix))
+		if err := writeParquet(commentFile, comments); err != nil {
+			return fmt.Errorf("writing comments parquet: %w", err)
+		}
+	}
+
+	// 4. Export Trending Events
+	events, err := e.db.GetAllTrendingEvents()
+	if err != nil {
+		return fmt.Errorf("getting all trending events: %w", err)
+	}
+	if len(events) > 0 {
+		eventsFile := filepath.Join(partDir, fmt.Sprintf("trending_events_all_%s.parquet", timestampSuffix))
+		if err := writeParquet(eventsFile, events); err != nil {
+			return fmt.Errorf("writing trending events parquet: %w", err)
+		}
+	}
+
+	e.logger.Info("Exported all current database data to Parquet",
+		"videos", len(videos),
+		"observations", len(obs),
+		"comments", len(comments),
+		"trending_events", len(events),
+		"destination", partDir,
+	)
+
+	return nil
+}
+
 func writeParquet[T any](path string, records []T) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -125,3 +200,4 @@ func writeParquet[T any](path string, records []T) error {
 	}
 	return writer.Close()
 }
+

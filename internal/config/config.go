@@ -75,28 +75,28 @@ func DefaultConfig() *Config {
 		},
 		Regions: []string{"US", "CA"},
 		Discovery: DiscoveryConfig{
-			RSSPollInterval:    90 * time.Minute,
+			RSSPollInterval:    60 * time.Minute,
 			MaxVideoAgeMinutes: 90,
-			ConcurrencyLimit:   20,
+			ConcurrencyLimit:   25,
 		},
 		Snapshots: SnapshotConfig{
 			PollInterval:     5 * time.Minute,
 			ToleranceMinutes: 15,
-			CheckpointsHours: []float64{1, 2, 3, 4, 5, 6, 12, 24, 36, 48, 60},
+			CheckpointsHours: []float64{0.5, 1, 1.5, 2, 3, 4, 5, 6, 12, 24, 36, 48, 60},
 		},
 		Comments: CommentConfig{
 			HarvestAtCheckpoint: 6.0,
-			MaxPagesPerVideo:    3,
+			MaxPagesPerVideo:    10,
 			MaxResultsPerPage:   100,
 		},
 		Trending: TrendingConfig{
-			PollInterval:       2 * time.Hour,
+			PollInterval:       1 * time.Hour,
 			AutoExpandChannels: true,
 		},
 		Channels: ChannelConfig{
 			SeedFile:             "configs/seed_channels.json",
-			MaxChannels:          1500,
-			EvictionInactiveDays: 45,
+			MaxChannels:          2000,
+			EvictionInactiveDays: 60,
 		},
 		Export: ExportConfig{
 			ParquetInterval: 6 * time.Hour,

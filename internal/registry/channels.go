@@ -39,18 +39,8 @@ func NewManager(db *database.DB, maxChannels int, evictionDays int, logger *slog
 	}
 }
 
-// LoadSeedChannels loads seed channels from JSON into the database if the table is empty.
+// LoadSeedChannels loads and upserts seed channels from JSON into the database.
 func (m *Manager) LoadSeedChannels(seedFilePath string) error {
-	count, err := m.db.GetChannelCount()
-	if err != nil {
-		return fmt.Errorf("checking channel count: %w", err)
-	}
-
-	if count > 0 {
-		m.logger.Info("Channel registry already populated", "active_count", count)
-		return nil
-	}
-
 	data, err := os.ReadFile(seedFilePath)
 	if err != nil {
 		return fmt.Errorf("reading seed channels file %s: %w", seedFilePath, err)

@@ -500,3 +500,120 @@ func (db *DB) GetTrendingEventsByVideoIDs(videoIDs []string) ([]TrendingEvent, e
 	}
 	return events, rows.Err()
 }
+
+func (db *DB) GetAllVideos() ([]Video, error) {
+	rows, err := db.Query(`
+		SELECT video_id, channel_id, channel_title, title, description, category_id, tags, 
+		       duration_seconds, definition, caption, licensed_content, made_for_kids,
+		       live_broadcast_content, default_audio_lang, thumbnail_url, topic_categories,
+		       published_at, discovered_at, tracked_from_birth
+		FROM videos;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var videos []Video
+	for rows.Next() {
+		var v Video
+		var desc, tags, def, live, lang, thumb, topics sql.NullString
+		if err := rows.Scan(
+			&v.VideoID, &v.ChannelID, &v.ChannelTitle, &v.Title, &desc, &v.CategoryID, &tags,
+			&v.DurationSeconds, &def, &v.Caption, &v.LicensedContent, &v.MadeForKids,
+			&live, &lang, &thumb, &topics,
+			&v.PublishedAt, &v.DiscoveredAt, &v.TrackedFromBirth,
+		); err != nil {
+			return nil, err
+		}
+		v.Description = desc.String
+		v.Tags = tags.String
+		v.Definition = def.String
+		v.LiveBroadcastContent = live.String
+		v.DefaultAudioLang = lang.String
+		v.ThumbnailURL = thumb.String
+		v.TopicCategories = topics.String
+		videos = append(videos, v)
+	}
+	return videos, rows.Err()
+}
+
+func (db *DB) GetAllObservations() ([]Observation, error) {
+	rows, err := db.Query(`
+		SELECT id, video_id, checkpoint_target_hours, actual_elapsed_hours, 
+		       observed_at, view_count, like_count, comment_count, is_trending
+		FROM observations
+		ORDER BY video_id, checkpoint_target_hours ASC;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var observations []Observation
+	for rows.Next() {
+		var o Observation
+		if err := rows.Scan(
+			&o.ID, &o.VideoID, &o.CheckpointTargetHours, &o.ActualElapsedHours,
+			&o.ObservedAt, &o.ViewCount, &o.LikeCount, &o.CommentCount, &o.IsTrending,
+		); err != nil {
+			return nil, err
+		}
+		observations = append(observations, o)
+	}
+	return observations, rows.Err()
+}
+
+func (db *DB) GetAllComments() ([]Comment, error) {
+	rows, err := db.Query(`
+		SELECT comment_id, video_id, author_channel, author_display_name, text, 
+		       published_at, updated_at, elapsed_minutes, like_count, reply_count
+		FROM comments;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var comments []Comment
+	for rows.Next() {
+		var c Comment
+		var author, authorName sql.NullString
+		var updatedAt sql.NullTime
+		if err := rows.Scan(
+			&c.CommentID, &c.VideoID, &author, &authorName, &c.Text,
+			&c.PublishedAt, &updatedAt, &c.ElapsedMinutes, &c.LikeCount, &c.ReplyCount,
+		); err != nil {
+			return nil, err
+		}
+		c.AuthorChannel = author.String
+		c.AuthorDisplayName = authorName.String
+		if updatedAt.Valid {
+			c.UpdatedAt = updatedAt.Time
+		}
+		comments = append(comments, c)
+	}
+	return comments, rows.Err()
+}
+
+func (db *DB) GetAllTrendingEvents() ([]TrendingEvent, error) {
+	rows, err := db.Query(`
+		SELECT id, video_id, region_code, trending_rank, captured_at, is_tracked_seed
+		FROM trending_events;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []TrendingEvent
+	for rows.Next() {
+		var e TrendingEvent
+		if err := rows.Scan(&e.ID, &e.VideoID, &e.RegionCode, &e.TrendingRank, &e.CapturedAt, &e.IsTrackedSeed); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+

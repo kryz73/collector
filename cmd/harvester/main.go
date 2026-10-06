@@ -22,6 +22,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "configs/harvester.yaml", "Path to YAML configuration file")
+	exportNow := flag.Bool("export-now", false, "Immediately export current database records to Parquet and exit")
 	flag.Parse()
 
 	// 1. Structured Logging
@@ -39,11 +40,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.YouTube.APIKey == "" {
-		logger.Error("YOUTUBE_API_KEY environment variable or youtube.api_key in config is required")
-		os.Exit(1)
-	}
-
 	// 3. Initialize SQLite Database
 	db, err := database.Open(cfg.Database.Path)
 	if err != nil {
@@ -52,6 +48,24 @@ func main() {
 	}
 	defer db.Close()
 	logger.Info("Database initialized with WAL mode", "path", cfg.Database.Path)
+
+	exporter := export.NewExporter(db, cfg.Export.OutputDir, logger)
+
+	// Check if this is an on-demand Parquet export request
+	if *exportNow {
+		logger.Info("Executing on-demand Parquet export...")
+		if err := exporter.ExportAllCurrentData(); err != nil {
+			logger.Error("Failed exporting data to Parquet", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("On-demand Parquet export complete!", "output_dir", cfg.Export.OutputDir)
+		return
+	}
+
+	if cfg.YouTube.APIKey == "" {
+		logger.Error("YOUTUBE_API_KEY environment variable or youtube.api_key in config is required")
+		os.Exit(1)
+	}
 
 	// 4. Initialize Quota Governor (10,000 units/day)
 	gov := quota.NewGovernor(cfg.YouTube.DailyQuotaLimit, logger)
@@ -74,7 +88,6 @@ func main() {
 	}
 
 	poller := discovery.NewPoller(cfg.Discovery.ConcurrencyLimit, logger)
-	exporter := export.NewExporter(db, cfg.Export.OutputDir, logger)
 
 	// 7. Initialize and Start Scheduler
 	sched := scheduler.NewScheduler(cfg, db, ytClient, poller, regManager, exporter, gov, logger)

@@ -15,39 +15,41 @@ regions:
   - "CA"
 
 discovery:
-  rss_poll_interval: "90m"             # Frequency to check channel RSS feeds (0 quota cost)
+  rss_poll_interval: "60m"             # Frequency to check channel RSS feeds (0 quota cost)
   max_video_age_minutes: 90            # Only track videos published within the last 90 minutes
-  concurrency_limit: 20                # Concurrent HTTP workers for RSS parsing
+  concurrency_limit: 25                # Concurrent HTTP workers for RSS parsing
 
 snapshots:
   poll_interval: "5m"                  # Scheduler tick to check due observation snapshots
   tolerance_minutes: 15                # Allowed ± window around target checkpoint
   checkpoints_hours:
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    - 6
-    - 12
-    - 24
-    - 36
-    - 48
-    - 60
+    - 0.5                              # 30 minutes early ignition
+    - 1.0                              # 1 hour
+    - 1.5                              # 90 minutes
+    - 2.0                              # 2 hours
+    - 3.0                              # 3 hours
+    - 4.0                              # 4 hours
+    - 5.0                              # 5 hours
+    - 6.0                              # 6 hours (Feature cutoff + comment harvest)
+    - 12.0                             # 12 hours
+    - 24.0                             # 24 hours (1 full circadian cycle)
+    - 36.0                             # 36 hours
+    - 48.0                             # 48 hours (2 full circadian cycles)
+    - 60.0                             # 60 hours (Target sealed label)
 
 comments:
   harvest_at_checkpoint: 6.0           # Trigger comment harvesting at 6-hour observation cutoff
-  max_pages_per_video: 3               # Max pages (100 comments/page) per video
+  max_pages_per_video: 10              # Max pages (100 comments/page -> 1,000 comments) per video
   max_results_per_page: 100            # YouTube API max per page
 
 trending:
-  poll_interval: "2h"                  # Check US & CA trending charts every 2 hours
+  poll_interval: "1h"                  # Check US & CA trending charts hourly
   auto_expand_channels: true           # Automatically add untracked trending creators to registry
 
 channels:
   seed_file: "configs/seed_channels.json"
-  max_channels: 1500                   # LRU channel cap to prevent unbounded polling bloat
-  eviction_inactive_days: 45           # Evict channels with no uploads in 45 days when cap reached
+  max_channels: 2000                   # LRU channel cap
+  eviction_inactive_days: 60           # Evict channels with no uploads in 60 days when cap reached
 
 export:
   parquet_interval: "6h"               # Export sealed records to Apache Parquet every 6 hours
