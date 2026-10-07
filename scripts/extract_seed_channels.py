@@ -75,12 +75,12 @@ def main():
     active_channels.sort(key=lambda x: x['video_count'], reverse=True)
 
     # Stratify into 3 tiers:
-    # Tier 1: Top 300 channels (Heavy trenders, >= 15 videos)
-    # Tier 2: Next 600 channels (Frequent trenders, 6-14 videos)
-    # Tier 3: Next 600 channels (Breakout creators, 2-5 videos)
-    tier_1 = active_channels[:300]
-    tier_2 = active_channels[300:900]
-    tier_3 = active_channels[900:1500]
+    # Tier 1: Top 500 channels (Heavy trenders)
+    # Tier 2: Next 1,500 channels (Frequent trenders)
+    # Tier 3: Next 1,500 channels (Breakout creators)
+    tier_1 = active_channels[:500]
+    tier_2 = active_channels[500:2000]
+    tier_3 = active_channels[2000:3500]
 
     def clean_tier(ch_list):
         return [
