@@ -45,6 +45,7 @@ type VideoTask struct {
 	CurrentCheckpoint int        `json:"current_checkpoint" db:"current_checkpoint"`
 	NextDueAt         time.Time  `json:"next_due_at" db:"next_due_at"`
 	CommentsHarvested bool       `json:"comments_harvested" db:"comments_harvested"`
+	CommentsStage     int        `json:"comments_stage" db:"comments_stage"` // 0=none, 1=stage 1 (1h), 2=stage 2 (6h)
 	IsSealed          bool       `json:"is_sealed" db:"is_sealed"`
 	SealedAt          *time.Time `json:"sealed_at" db:"sealed_at"`
 }
@@ -82,6 +83,7 @@ type TrendingEvent struct {
 	VideoID       string    `json:"video_id" db:"video_id" parquet:"video_id"`
 	RegionCode    string    `json:"region_code" db:"region_code" parquet:"region_code"`
 	TrendingRank  int       `json:"trending_rank" db:"trending_rank" parquet:"trending_rank"`
+	CategoryID    int       `json:"category_id" db:"category_id" parquet:"category_id"`
 	CapturedAt    time.Time `json:"captured_at" db:"captured_at" parquet:"captured_at"`
 	IsTrackedSeed bool      `json:"is_tracked_seed" db:"is_tracked_seed" parquet:"is_tracked_seed"`
 }

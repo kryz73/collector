@@ -97,8 +97,8 @@ func (c *Client) FetchVideoDetails(ctx context.Context, videoIDs []string) ([]da
 	return allVideos, allObs, nil
 }
 
-// FetchTrending fetches top 50 trending videos for a specified country code (e.g. "US", "CA").
-func (c *Client) FetchTrending(ctx context.Context, regionCode string) ([]database.TrendingEvent, []database.Video, error) {
+// FetchTrending fetches top 50 trending videos for a specified country code and optional category.
+func (c *Client) FetchTrending(ctx context.Context, regionCode string, categoryID int) ([]database.TrendingEvent, []database.Video, error) {
 	if !c.governor.Spend(1, quota.PriorityCritical) {
 		return nil, nil, fmt.Errorf("quota exceeded for chart=mostPopular")
 	}
@@ -110,13 +110,18 @@ func (c *Client) FetchTrending(ctx context.Context, regionCode string) ([]databa
 			RegionCode(regionCode).
 			MaxResults(50).
 			Context(ctx)
+
+		if categoryID > 0 {
+			call = call.VideoCategoryId(strconv.Itoa(categoryID))
+		}
+
 		var apiErr error
 		response, apiErr = call.Do()
 		return apiErr
 	})
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("chart=mostPopular error for region %s: %w", regionCode, err)
+		return nil, nil, fmt.Errorf("chart=mostPopular error for region %s (category %d): %w", regionCode, categoryID, err)
 	}
 
 	now := time.Now().UTC()
@@ -131,6 +136,7 @@ func (c *Client) FetchTrending(ctx context.Context, regionCode string) ([]databa
 			VideoID:       item.Id,
 			RegionCode:    regionCode,
 			TrendingRank:  rank + 1,
+			CategoryID:    categoryID,
 			CapturedAt:    now,
 			IsTrackedSeed: false, // Caller updates this if already tracked
 		})

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS video_tasks (
     current_checkpoint  INTEGER NOT NULL DEFAULT 0,
     next_due_at         DATETIME NOT NULL,
     comments_harvested  BOOLEAN NOT NULL DEFAULT 0,
+    comments_stage      INTEGER NOT NULL DEFAULT 0,
     is_sealed           BOOLEAN NOT NULL DEFAULT 0,
     sealed_at           DATETIME,
     is_exported         BOOLEAN NOT NULL DEFAULT 0,
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS trending_events (
     video_id        TEXT NOT NULL,
     region_code     TEXT NOT NULL,
     trending_rank   INTEGER NOT NULL,
+    category_id     INTEGER NOT NULL DEFAULT 0,
     captured_at     DATETIME NOT NULL DEFAULT (datetime('now')),
     is_tracked_seed BOOLEAN NOT NULL DEFAULT 0
 );
@@ -97,5 +99,10 @@ func (db *DB) Migrate() error {
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("executing schema migration: %w", err)
 	}
+
+	// Dynamic column migrations for existing databases
+	_, _ = db.Exec("ALTER TABLE trending_events ADD COLUMN category_id INTEGER NOT NULL DEFAULT 0;")
+	_, _ = db.Exec("ALTER TABLE video_tasks ADD COLUMN comments_stage INTEGER NOT NULL DEFAULT 0;")
+
 	return nil
 }

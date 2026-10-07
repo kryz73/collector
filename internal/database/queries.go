@@ -126,20 +126,20 @@ func (db *DB) VideoExists(videoID string) (bool, error) {
 func (db *DB) InsertVideoTask(t VideoTask) error {
 	query := `
 	INSERT INTO video_tasks (
-		video_id, published_at, current_checkpoint, next_due_at, comments_harvested, is_sealed, sealed_at, is_exported
-	) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+		video_id, published_at, current_checkpoint, next_due_at, comments_harvested, comments_stage, is_sealed, sealed_at, is_exported
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
 	ON CONFLICT(video_id) DO NOTHING;
 	`
 	_, err := db.Exec(
 		query,
-		t.VideoID, t.PublishedAt, t.CurrentCheckpoint, t.NextDueAt, t.CommentsHarvested, t.IsSealed, t.SealedAt,
+		t.VideoID, t.PublishedAt, t.CurrentCheckpoint, t.NextDueAt, t.CommentsHarvested, t.CommentsStage, t.IsSealed, t.SealedAt,
 	)
 	return err
 }
 
 func (db *DB) GetDueVideoTasks(now time.Time, limit int) ([]VideoTask, error) {
 	rows, err := db.Query(`
-		SELECT video_id, published_at, current_checkpoint, next_due_at, comments_harvested, is_sealed, sealed_at
+		SELECT video_id, published_at, current_checkpoint, next_due_at, comments_harvested, comments_stage, is_sealed, sealed_at
 		FROM video_tasks
 		WHERE is_sealed = 0 AND next_due_at <= ?
 		ORDER BY next_due_at ASC
@@ -153,7 +153,7 @@ func (db *DB) GetDueVideoTasks(now time.Time, limit int) ([]VideoTask, error) {
 	var tasks []VideoTask
 	for rows.Next() {
 		var t VideoTask
-		if err := rows.Scan(&t.VideoID, &t.PublishedAt, &t.CurrentCheckpoint, &t.NextDueAt, &t.CommentsHarvested, &t.IsSealed, &t.SealedAt); err != nil {
+		if err := rows.Scan(&t.VideoID, &t.PublishedAt, &t.CurrentCheckpoint, &t.NextDueAt, &t.CommentsHarvested, &t.CommentsStage, &t.IsSealed, &t.SealedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, t)
@@ -175,8 +175,17 @@ func (db *DB) UpdateTaskCheckpoint(videoID string, nextCheckpoint int, nextDue t
 	return err
 }
 
+func (db *DB) UpdateTaskCommentsStage(videoID string, stage int) error {
+	_, err := db.Exec(`
+		UPDATE video_tasks 
+		SET comments_stage = ?, comments_harvested = CASE WHEN ? >= 2 THEN 1 ELSE comments_harvested END
+		WHERE video_id = ?;
+	`, stage, stage, videoID)
+	return err
+}
+
 func (db *DB) MarkCommentsHarvested(videoID string) error {
-	_, err := db.Exec(`UPDATE video_tasks SET comments_harvested = 1 WHERE video_id = ?;`, videoID)
+	_, err := db.Exec(`UPDATE video_tasks SET comments_harvested = 1, comments_stage = 2 WHERE video_id = ?;`, videoID)
 	return err
 }
 
@@ -309,8 +318,8 @@ func (db *DB) InsertTrendingEvents(events []TrendingEvent) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO trending_events (video_id, region_code, trending_rank, captured_at, is_tracked_seed)
-		VALUES (?, ?, ?, ?, ?);
+		INSERT INTO trending_events (video_id, region_code, trending_rank, category_id, captured_at, is_tracked_seed)
+		VALUES (?, ?, ?, ?, ?, ?);
 	`)
 	if err != nil {
 		return err
@@ -318,7 +327,7 @@ func (db *DB) InsertTrendingEvents(events []TrendingEvent) error {
 	defer stmt.Close()
 
 	for _, e := range events {
-		if _, err := stmt.Exec(e.VideoID, e.RegionCode, e.TrendingRank, e.CapturedAt, e.IsTrackedSeed); err != nil {
+		if _, err := stmt.Exec(e.VideoID, e.RegionCode, e.TrendingRank, e.CategoryID, e.CapturedAt, e.IsTrackedSeed); err != nil {
 			return err
 		}
 	}
@@ -480,7 +489,7 @@ func (db *DB) GetTrendingEventsByVideoIDs(videoIDs []string) ([]TrendingEvent, e
 		args[i] = id
 	}
 	query := fmt.Sprintf(`
-		SELECT id, video_id, region_code, trending_rank, captured_at, is_tracked_seed
+		SELECT id, video_id, region_code, trending_rank, category_id, captured_at, is_tracked_seed
 		FROM trending_events WHERE video_id IN (%s);
 	`, strings.Join(placeholders, ","))
 
@@ -493,7 +502,7 @@ func (db *DB) GetTrendingEventsByVideoIDs(videoIDs []string) ([]TrendingEvent, e
 	var events []TrendingEvent
 	for rows.Next() {
 		var e TrendingEvent
-		if err := rows.Scan(&e.ID, &e.VideoID, &e.RegionCode, &e.TrendingRank, &e.CapturedAt, &e.IsTrackedSeed); err != nil {
+		if err := rows.Scan(&e.ID, &e.VideoID, &e.RegionCode, &e.TrendingRank, &e.CategoryID, &e.CapturedAt, &e.IsTrackedSeed); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
@@ -598,7 +607,7 @@ func (db *DB) GetAllComments() ([]Comment, error) {
 
 func (db *DB) GetAllTrendingEvents() ([]TrendingEvent, error) {
 	rows, err := db.Query(`
-		SELECT id, video_id, region_code, trending_rank, captured_at, is_tracked_seed
+		SELECT id, video_id, region_code, trending_rank, category_id, captured_at, is_tracked_seed
 		FROM trending_events;
 	`)
 	if err != nil {
@@ -609,7 +618,7 @@ func (db *DB) GetAllTrendingEvents() ([]TrendingEvent, error) {
 	var events []TrendingEvent
 	for rows.Next() {
 		var e TrendingEvent
-		if err := rows.Scan(&e.ID, &e.VideoID, &e.RegionCode, &e.TrendingRank, &e.CapturedAt, &e.IsTrackedSeed); err != nil {
+		if err := rows.Scan(&e.ID, &e.VideoID, &e.RegionCode, &e.TrendingRank, &e.CategoryID, &e.CapturedAt, &e.IsTrackedSeed); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
