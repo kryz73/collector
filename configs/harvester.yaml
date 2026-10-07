@@ -13,24 +13,26 @@ database:
 regions:
   - "US"
   - "CA"
+  - "GB"
+  - "AU"
 
 discovery:
   rss_poll_interval: "60m"             # Frequency to check channel RSS feeds (0 quota cost)
   max_video_age_minutes: 90            # Only track videos published within the last 90 minutes
-  concurrency_limit: 25                # Concurrent HTTP workers for RSS parsing
+  concurrency_limit: 30                # Concurrent HTTP workers for RSS parsing
 
 snapshots:
   poll_interval: "5m"                  # Scheduler tick to check due observation snapshots
   tolerance_minutes: 15                # Allowed ± window around target checkpoint
   checkpoints_hours:
     - 0.5                              # 30 minutes early ignition
-    - 1.0                              # 1 hour
+    - 1.0                              # 1 hour (Stage 1 comment harvest)
     - 1.5                              # 90 minutes
     - 2.0                              # 2 hours
     - 3.0                              # 3 hours
     - 4.0                              # 4 hours
     - 5.0                              # 5 hours
-    - 6.0                              # 6 hours (Feature cutoff + comment harvest)
+    - 6.0                              # 6 hours (Feature cutoff + Stage 2 comment harvest)
     - 12.0                             # 12 hours
     - 24.0                             # 24 hours (1 full circadian cycle)
     - 36.0                             # 36 hours
@@ -38,17 +40,26 @@ snapshots:
     - 60.0                             # 60 hours (Target sealed label)
 
 comments:
-  harvest_at_checkpoint: 6.0           # Trigger comment harvesting at 6-hour observation cutoff
-  max_pages_per_video: 10              # Max pages (100 comments/page -> 1,000 comments) per video
+  harvest_at_checkpoint: 6.0           # Legacy fallback cutoff
+  max_pages_per_video: 15              # Global max pages per video
   max_results_per_page: 100            # YouTube API max per page
+  stage_1_checkpoint_hours: 1.0        # Stage 1 early reaction harvest (1 hour)
+  stage_1_max_pages: 5                 # Stage 1 page limit (up to 500 comments)
+  stage_2_checkpoint_hours: 6.0        # Stage 2 full maturation harvest (6 hours)
+  stage_2_max_pages: 15                # Stage 2 page limit (up to 1,500 comments)
 
 trending:
-  poll_interval: "1h"                  # Check US & CA trending charts hourly
+  poll_interval: "1h"                  # Check trending charts hourly
   auto_expand_channels: true           # Automatically add untracked trending creators to registry
+  categories:                          # Trending categories to track per region
+    - 0                                # All / General Trending
+    - 10                               # Music
+    - 20                               # Gaming
+    - 24                               # Entertainment
 
 channels:
   seed_file: "configs/seed_channels.json"
-  max_channels: 2000                   # LRU channel cap
+  max_channels: 4000                   # LRU channel cap
   eviction_inactive_days: 60           # Evict channels with no uploads in 60 days when cap reached
 
 export:

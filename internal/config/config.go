@@ -44,14 +44,19 @@ type SnapshotConfig struct {
 }
 
 type CommentConfig struct {
-	HarvestAtCheckpoint float64 `yaml:"harvest_at_checkpoint"`
-	MaxPagesPerVideo    int     `yaml:"max_pages_per_video"`
-	MaxResultsPerPage   int64   `yaml:"max_results_per_page"`
+	HarvestAtCheckpoint   float64 `yaml:"harvest_at_checkpoint"`
+	MaxPagesPerVideo      int     `yaml:"max_pages_per_video"`
+	MaxResultsPerPage     int64   `yaml:"max_results_per_page"`
+	Stage1CheckpointHours float64 `yaml:"stage_1_checkpoint_hours"`
+	Stage1MaxPages        int     `yaml:"stage_1_max_pages"`
+	Stage2CheckpointHours float64 `yaml:"stage_2_checkpoint_hours"`
+	Stage2MaxPages        int     `yaml:"stage_2_max_pages"`
 }
 
 type TrendingConfig struct {
 	PollInterval       time.Duration `yaml:"poll_interval"`
 	AutoExpandChannels bool          `yaml:"auto_expand_channels"`
+	Categories         []int         `yaml:"categories"`
 }
 
 type ChannelConfig struct {
@@ -73,7 +78,7 @@ func DefaultConfig() *Config {
 		Database: DatabaseConfig{
 			Path: "./data/harvester.db",
 		},
-		Regions: []string{"US", "CA"},
+		Regions: []string{"US", "CA", "GB", "AU"},
 		Discovery: DiscoveryConfig{
 			RSSPollInterval:    60 * time.Minute,
 			MaxVideoAgeMinutes: 90,
@@ -85,17 +90,22 @@ func DefaultConfig() *Config {
 			CheckpointsHours: []float64{0.5, 1, 1.5, 2, 3, 4, 5, 6, 12, 24, 36, 48, 60},
 		},
 		Comments: CommentConfig{
-			HarvestAtCheckpoint: 6.0,
-			MaxPagesPerVideo:    10,
-			MaxResultsPerPage:   100,
+			HarvestAtCheckpoint:   6.0,
+			MaxPagesPerVideo:      10,
+			MaxResultsPerPage:     100,
+			Stage1CheckpointHours: 1.0,
+			Stage1MaxPages:        5,
+			Stage2CheckpointHours: 6.0,
+			Stage2MaxPages:        15,
 		},
 		Trending: TrendingConfig{
 			PollInterval:       1 * time.Hour,
 			AutoExpandChannels: true,
+			Categories:         []int{0, 10, 20, 24},
 		},
 		Channels: ChannelConfig{
 			SeedFile:             "configs/seed_channels.json",
-			MaxChannels:          2000,
+			MaxChannels:          4000,
 			EvictionInactiveDays: 60,
 		},
 		Export: ExportConfig{

@@ -182,14 +182,19 @@ func (s *Scheduler) runDiscoveryOnce(ctx context.Context) {
 			continue
 		}
 
-		// First checkpoint is scheduled for 1 hour after publication
-		nextDue := v.PublishedAt.Add(1 * time.Hour)
+		// First checkpoint is scheduled based on checkpoints_hours (defaulting to first configured mark)
+		firstHours := 1.0
+		if len(s.cfg.Snapshots.CheckpointsHours) > 0 {
+			firstHours = s.cfg.Snapshots.CheckpointsHours[0]
+		}
+		nextDue := v.PublishedAt.Add(time.Duration(firstHours * float64(time.Hour)))
 		task := database.VideoTask{
 			VideoID:           v.VideoID,
 			PublishedAt:       v.PublishedAt,
 			CurrentCheckpoint: 0,
 			NextDueAt:         nextDue,
 			CommentsHarvested: false,
+			CommentsStage:     0,
 			IsSealed:          false,
 		}
 		if err := s.db.InsertVideoTask(task); err != nil {
@@ -254,10 +259,27 @@ func (s *Scheduler) runSnapshotOnce(ctx context.Context) {
 		task := taskMap[obs.VideoID]
 		nextIndex := task.CurrentCheckpoint + 1
 
-		// Check if we hit the 6-hour checkpoint and need to harvest comments
+		// Dual-stage comment harvesting:
 		targetHours := s.getCheckpointHours(nextIndex)
-		if targetHours >= s.cfg.Comments.HarvestAtCheckpoint && !task.CommentsHarvested {
-			s.harvestCommentsForVideo(ctx, task.VideoID, task.PublishedAt)
+
+		// Stage 1: early reaction surge (e.g. 1.0h, max 5 pages)
+		stage1Hours := s.cfg.Comments.Stage1CheckpointHours
+		if stage1Hours <= 0 {
+			stage1Hours = 1.0
+		}
+		if targetHours >= stage1Hours && task.CommentsStage < 1 {
+			s.harvestCommentsForVideoStage(ctx, task.VideoID, task.PublishedAt, 1, s.cfg.Comments.Stage1MaxPages)
+			task.CommentsStage = 1
+		}
+
+		// Stage 2: full discussion maturation (e.g. 6.0h, max 15 pages)
+		stage2Hours := s.cfg.Comments.Stage2CheckpointHours
+		if stage2Hours <= 0 {
+			stage2Hours = 6.0
+		}
+		if targetHours >= stage2Hours && task.CommentsStage < 2 {
+			s.harvestCommentsForVideoStage(ctx, task.VideoID, task.PublishedAt, 2, s.cfg.Comments.Stage2MaxPages)
+			task.CommentsStage = 2
 		}
 
 		if nextIndex >= len(checkpoints) {
@@ -278,19 +300,26 @@ func (s *Scheduler) runSnapshotOnce(ctx context.Context) {
 	)
 }
 
-func (s *Scheduler) harvestCommentsForVideo(ctx context.Context, videoID string, publishedAt time.Time) {
-	maxPages := s.governor.MaxCommentPages(s.cfg.Comments.MaxPagesPerVideo)
+func (s *Scheduler) harvestCommentsForVideoStage(ctx context.Context, videoID string, publishedAt time.Time, stage int, pageLimit int) {
+	if pageLimit <= 0 {
+		pageLimit = 10
+	}
+	maxPages := s.governor.MaxCommentPages(pageLimit)
 	comments, err := s.ytClient.FetchComments(ctx, videoID, publishedAt, maxPages)
 	if err != nil {
-		s.logger.Warn("Failed harvesting comments for video", "video_id", videoID, "error", err)
+		s.logger.Warn("Failed harvesting comments for video", "video_id", videoID, "stage", stage, "error", err)
 	} else if len(comments) > 0 {
 		if err := s.db.InsertComments(comments); err != nil {
-			s.logger.Error("Failed saving harvested comments", "video_id", videoID, "error", err)
+			s.logger.Error("Failed saving harvested comments", "video_id", videoID, "stage", stage, "error", err)
 		} else {
-			s.logger.Info("Harvested early comments", "video_id", videoID, "count", len(comments))
+			s.logger.Info("Harvested comments", "video_id", videoID, "stage", stage, "count", len(comments))
 		}
 	}
-	_ = s.db.MarkCommentsHarvested(videoID)
+	_ = s.db.UpdateTaskCommentsStage(videoID, stage)
+}
+
+func (s *Scheduler) harvestCommentsForVideo(ctx context.Context, videoID string, publishedAt time.Time) {
+	s.harvestCommentsForVideoStage(ctx, videoID, publishedAt, 2, s.cfg.Comments.Stage2MaxPages)
 }
 
 func (s *Scheduler) getCheckpointHours(index int) float64 {
@@ -309,56 +338,63 @@ func (s *Scheduler) getCheckpointHours(index int) float64 {
 // =====================================================================
 
 func (s *Scheduler) runTrendingOnce(ctx context.Context) {
+	categories := s.cfg.Trending.Categories
+	if len(categories) == 0 {
+		categories = []int{0}
+	}
+
 	for _, region := range s.cfg.Regions {
-		events, videos, err := s.ytClient.FetchTrending(ctx, region)
-		if err != nil {
-			s.logger.Error("Failed fetching trending chart", "region", region, "error", err)
-			continue
-		}
-
-		for i := range events {
-			exists, _ := s.db.VideoExists(events[i].VideoID)
-			events[i].IsTrackedSeed = exists
-		}
-
-		if err := s.db.InsertTrendingEvents(events); err != nil {
-			s.logger.Error("Failed saving trending events", "region", region, "error", err)
-		}
-
-		// Handle untracked trending videos: ingest and auto-expand channels
-		for _, v := range videos {
-			exists, _ := s.db.VideoExists(v.VideoID)
-			if !exists {
-				// 1. Ensure channel is in channels table first (satisfies FOREIGN KEY)
-				if s.cfg.Trending.AutoExpandChannels {
-					if err := s.regManager.AddDiscoveredChannel(v.ChannelID, v.ChannelTitle, v.CategoryID); err != nil {
-						s.logger.Warn("Failed auto-expanding trending channel", "channel_id", v.ChannelID, "error", err)
-					}
-				} else {
-					// Insert stub channel if auto-expand is disabled to satisfy FK
-					_ = s.db.InsertChannel(database.Channel{
-						ChannelID:    v.ChannelID,
-						ChannelTitle: v.ChannelTitle,
-						CategoryID:   v.CategoryID,
-						Tier:         "trending_stub",
-						AddedAt:      time.Now().UTC(),
-						IsActive:     false,
-					})
-				}
-
-				// 2. Insert video
-				v.TrackedFromBirth = false
-				if err := s.db.InsertVideo(v); err != nil {
-					s.logger.Error("Failed inserting trending video", "video_id", v.VideoID, "error", err)
-					continue
-				}
-
-				// 3. Harvest early comments for this viral video
-				s.harvestCommentsForVideo(ctx, v.VideoID, v.PublishedAt)
+		for _, catID := range categories {
+			events, videos, err := s.ytClient.FetchTrending(ctx, region, catID)
+			if err != nil {
+				s.logger.Error("Failed fetching trending chart", "region", region, "category_id", catID, "error", err)
+				continue
 			}
-		}
 
-		s.logger.Info("Processed trending chart", "region", region, "entries", len(events))
+			for i := range events {
+				exists, _ := s.db.VideoExists(events[i].VideoID)
+				events[i].IsTrackedSeed = exists
+			}
+
+			if err := s.db.InsertTrendingEvents(events); err != nil {
+				s.logger.Error("Failed saving trending events", "region", region, "category_id", catID, "error", err)
+			}
+
+			// Handle untracked trending videos: ingest and auto-expand channels
+			for _, v := range videos {
+				exists, _ := s.db.VideoExists(v.VideoID)
+				if !exists {
+					// 1. Ensure channel is in channels table first (satisfies FOREIGN KEY)
+					if s.cfg.Trending.AutoExpandChannels {
+						if err := s.regManager.AddDiscoveredChannel(v.ChannelID, v.ChannelTitle, v.CategoryID); err != nil {
+							s.logger.Warn("Failed auto-expanding trending channel", "channel_id", v.ChannelID, "error", err)
+						}
+					} else {
+						// Insert stub channel if auto-expand is disabled to satisfy FK
+						_ = s.db.InsertChannel(database.Channel{
+							ChannelID:    v.ChannelID,
+							ChannelTitle: v.ChannelTitle,
+							CategoryID:   v.CategoryID,
+							Tier:         "trending_stub",
+							AddedAt:      time.Now().UTC(),
+							IsActive:     false,
+						})
+					}
+
+					// 2. Insert video
+					v.TrackedFromBirth = false
+					if err := s.db.InsertVideo(v); err != nil {
+						s.logger.Error("Failed inserting trending video", "video_id", v.VideoID, "error", err)
+						continue
+					}
+
+					// 3. Harvest early comments for this viral video
+					s.harvestCommentsForVideo(ctx, v.VideoID, v.PublishedAt)
+				}
+			}
+
+			s.logger.Info("Processed trending chart", "region", region, "category_id", catID, "entries", len(events))
+		}
 	}
 }
 
